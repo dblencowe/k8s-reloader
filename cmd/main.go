@@ -6,6 +6,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"log"
 	"os"
+	"time"
 )
 
 func main() {
@@ -22,10 +23,13 @@ func main() {
 
 	fileOps := make(chan fsnotify.Event)
 	errChan := make(chan error)
-	err = internal.WatchFiles(fileOps, errChan, files...)
-	if err != nil {
-		log.Fatal(err)
-	}
+	go func() {
+		err := internal.WatchFiles(fileOps, errChan, files...)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
+	time.Sleep(3 * time.Second)
 	defer internal.Shutdown()
 
 	for {

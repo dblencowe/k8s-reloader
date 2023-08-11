@@ -1,6 +1,7 @@
 package internal_test
 
 import (
+	"fmt"
 	"github.com/dblencowe/k8s-reloader/internal"
 	"github.com/fsnotify/fsnotify"
 	"github.com/stretchr/testify/assert"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"syscall"
 	"testing"
+	"time"
 )
 
 func TestWatchFiles(t *testing.T) {
@@ -27,8 +29,13 @@ func TestWatchFiles(t *testing.T) {
 
 		fileOps := make(chan fsnotify.Event)
 		errChan := make(chan error)
-		err = internal.WatchFiles(fileOps, errChan, f.Name())
-		assert.NoError(t, err)
+		go func() {
+			err := internal.WatchFiles(fileOps, errChan, f.Name())
+			assert.NoError(t, err)
+		}()
+
+		time.Sleep(3 * time.Second)
+		//assert.Equal(t, 0, len(errChan))
 		_ = os.WriteFile(f.Name(), []byte("test"), 0644)
 
 		event := <-fileOps
@@ -36,21 +43,25 @@ func TestWatchFiles(t *testing.T) {
 		assert.Equal(t, f.Name(), event.Name)
 	})
 
-	//t.Run("Detects created file", func(t *testing.T) {
-	//	fileOps := make(chan fsnotify.Event)
-	//	errChan := make(chan error)
-	//	err := internal.WatchFiles(fileOps, errChan, "watchedfile")
-	//	assert.NoError(t, err)
-	//	f, err := os.CreateTemp(dir, "watchedfile")
-	//	if err != nil {
-	//		t.Fatal(err)
-	//	}
-	//	defer syscall.Unlink(f.Name())
-	//
-	//	event := <-fileOps
-	//	assert.Equal(t, fsnotify.Create, event.Op)
-	//	assert.Equal(t, "watchedfile", event.Name)
-	//})
+	t.Run("Detects created file", func(t *testing.T) {
+		fileOps := make(chan fsnotify.Event)
+		errChan := make(chan error)
+		go func() {
+			err := internal.WatchFiles(fileOps, errChan, fmt.Sprintf("%s/%s", dir, "test.txt"))
+			assert.NoError(t, err)
+		}()
+
+		time.Sleep(3 * time.Second)
+		f, err := os.Create(fmt.Sprintf("%s/%s", dir, "test.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer syscall.Unlink(f.Name())
+
+		event := <-fileOps
+		assert.Equal(t, fsnotify.Create, event.Op)
+		assert.Equal(t, fmt.Sprintf("%s/%s", dir, "test.txt"), event.Name)
+	})
 
 	//t.Run("Detects removed files", func(t *testing.T) {
 	//	f, err := os.CreateTemp(dir, "watchedfile")
@@ -59,13 +70,18 @@ func TestWatchFiles(t *testing.T) {
 	//	}
 	//	fileOps := make(chan fsnotify.Event)
 	//	errChan := make(chan error)
-	//	err = internal.WatchFiles(fileOps, errChan, f.Name())
-	//	assert.NoError(t, err)
-	//	syscall.Unlink(f.Name())
+	//	go func() {
+	//		err := internal.WatchFiles(fileOps, errChan, f.Name())
+	//		assert.NoError(t, err)
+	//	}()
 	//
-	//	event := <-fileOps
-	//	removed := false
-	//	assert.Equal(t, fsnotify.Remove, event.Op)
-	//	assert.Equal(t, f.Name(), event.Name)
+	//	time.Sleep(3 * time.Second)
+	//	syscall.Unlink(f.Name())
+	//	time.Sleep(3 * time.Second)
+	//	close(fileOps)
+	//	assert.Contains(t, fsnotify.Event{
+	//		Name: f.Name(),
+	//		Op:   fsnotify.Remove,
+	//	}, fileOps)
 	//})
 }
